@@ -10,8 +10,9 @@ use Data::Dumper;
 
 
 #Make some vars
-my @homes;				#Holds the home directories to be synced.
-my @ban = (				#Holds a list of files and directories to be skipped.
+my @homes;			#Holds the home directories to be synced.
+my $user;
+my @ban = (			#Holds a list of files and directories to be skipped.
 	qr/^Library/,
 	qr/^\.(\w+)?/,
 	qr/\w+\.plist/,
@@ -28,25 +29,26 @@ my @ban = (				#Holds a list of files and directories to be skipped.
 
 while (@ARGV) {
 	#Print help message.
-	if ($ARGV[0] =~ /^--?h(elp)?/i) {&dispHelp(); exit 0;}
+	if ($ARGV[0] =~ m/^--?h(elp)?/i) {&dispHelp(); exit 0;}
+	
+	#Set a folder to go to a specific username.
+	if ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
+	
 	
 	#Invaild argument
-	elsif ($ARGV[0] =~ /^(--?\w+)/i) {die "'$1' if not a valid option\n";}
+	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {die "'$1' if not a valid option\n";}
 	
 	#This should be a user.
 	else {
 		#Check if the item passed is a directory.
 		if (-f $ARGV[0]) {
-			print "'" . $ARGV[0] . "' is a file, skipping...\n";
+			print "'" . shift . "' is a file, skipping...\n";
 		}
 		else {
 			#Add arg to the 'homes' list.
-			push @homes, $ARGV[0];
+			push @homes, shift;
 		}
 	}
-	
-	#Next argument
-	shift;
 }
 
 
@@ -55,22 +57,31 @@ while (@ARGV) {
 #the user's account into Google Drive.
 my $count = 1;
 foreach my $home (@homes) {
+	#Check if the 'user' variable is set. If not, set it to the user assosciaded
+	#with the current home directory.
+	if (! $user) {
+		my @tmp = split '/', $home;
+		my $i = 0;
+		$user = $tmp[--$i] while (!$user);
+	}
+	
+	
 	#Check if the user exists. If the user does not exist, skip them.
-	if (! userExists( $home )) {
-		print "'$home' is not a valid user. Skipping...\n";
+	if (! userExists( $user )) {
+		print "'$user' is not a valid user. Skipping...\n";
 		next;
 	}
 	
 	#Print out the user's name for logging.
-	print "Uploading folder $home.\n";
+	print "Uploading folder $home to user $user.\n";
 	
 	#Make a folder in the user's Google Drive account called 'Import-[date]'.
 	#Place the user's files inside of this directory.
 	my $importFolder = "Import-" . `date "+%F"`;
-	my $out = `python /opt/GAM-3.63/gam.py user $home\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
+	my $out = `python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
-	&upload($id, $home, $home);
+	&upload($id, $home, $user);
 	
 	#Display the percentage of homes moved.
 	print ((($count / @homes) * 100) . "% completed...\n");
@@ -94,6 +105,8 @@ USAGE: $0 [OPTIONS] [HOMES]
 
 OPTIONS:
 	-h | --help		This help message.
+	-u | --user		Set the folders to go to a specific user instead of the
+					name of the home directory.
 
 HOMES:
 	The home directories of the user's that you want to have moved to Google
@@ -154,11 +167,15 @@ sub upload {
 	#Determine if the file to upload is a file or dir.
 	if (-f $loc) {
 		#This item is a file.
+		
+		#Replace all of the spaces with underscores.
+		
 		#Upload this file to the user's Google Drive.
 		`python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile localfile "$loc" parentid $id`;
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
+		
 		#Make the folder an store the output (should look like:
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
