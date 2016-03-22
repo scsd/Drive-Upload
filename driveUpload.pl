@@ -10,6 +10,7 @@ use Data::Dumper;
 
 
 #Make some vars
+my $errLog = "/home/nic/upload.err";
 my @homes;			#Holds the home directories to be synced.
 my $user;
 my @ban = (			#Holds a list of files and directories to be skipped.
@@ -36,13 +37,13 @@ while (@ARGV) {
 	
 	
 	#Invaild argument
-	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {die "'$1' if not a valid option\n";}
+	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {err(1, "'$1' is not a valid option\n");}
 	
 	#This should be a user.
 	else {
 		#Check if the item passed is a directory.
 		if (-f $ARGV[0]) {
-			print "'" . shift . "' is a file, skipping...\n";
+			err(0, "'" . shift . "' is a file, skipping...\n");
 		}
 		else {
 			#Add arg to the 'homes' list.
@@ -57,7 +58,7 @@ while (@ARGV) {
 #the user's account into Google Drive.
 my $count = 1;
 foreach my $home (@homes) {
-	#Check if the 'user' variable is set. If not, set it to the user assosciaded
+	#Check if the 'user' variable is set. If not, set it to the user assosciated
 	#with the current home directory.
 	if (! $user) {
 		my @tmp = split '/', $home;
@@ -68,7 +69,7 @@ foreach my $home (@homes) {
 	
 	#Check if the user exists. If the user does not exist, skip them.
 	if (! userExists( $user )) {
-		print "'$user' is not a valid user. Skipping...\n";
+		err(0, "'$user' is not a valid user. Skipping...\n");
 		next;
 	}
 	
@@ -113,9 +114,44 @@ HOMES:
 	Drive. This assumes that the name of the home directory matches the	name
 	of the user's Google Drive account.
 
+Error Log:
+	The error log is set to be '$errLog', but this can be changed in this
+	file. All errors that the script finds should be written to this file.
+
 END_HELP
 }
 
+
+
+#Function to write errors to to a log file with a date.
+sub err {
+	my $fatal = shift;
+	my $in = join (', ', @_);
+	
+	#Make/Open the log file.
+	system("touch $errLog");
+	open(my $ERR, '>>', $errLog) or die "Cannot open the file '$errLog'";
+	
+	#Get the date and time.
+	my $dt = `date "+%Y/%m/%d %H:%M:%S"`;
+	chomp $dt;
+	
+	#Message to print.
+	my $msg = "$dt $in";
+	
+	#Place everything given into the log file.
+	print $ERR "$msg";
+	
+	#Close the log file.
+	close $ERR;
+	
+	if ($fatal) {
+		die "$msg";
+	}
+	else {
+		print "$msg";
+	}
+}
 
 
 
@@ -148,9 +184,9 @@ sub userExists {
 #Recursive function to upload a file or folder to google drive.
 sub upload {
 	#Get the parent ID, and the loaction of the file to upload.
-	my $id =	shift || die "No parent ID given in upload function.";
-	my $loc =	shift || die "No file given to upload for upload function.";
-	my $user =    shift || die "No user account given for upload function.";
+	my $id =	shift || err(1, "No parent ID given in upload function.");
+	my $loc =	shift || err(1, "No file given to upload for upload function.");
+	my $user =    shift || err(1, "No user account given for upload function.");
 	
 	#Seperate the filename from the location path
 	my $file = (split '/', $loc)[-1];
@@ -185,7 +221,7 @@ sub upload {
 		
 		#Open the directory, and for each item inside, make the Google
 	    #Drive folder for it, and call this function again.
-		opendir(my $DIR, $loc) || die "Cannot open the folder at $loc";
+		opendir(my $DIR, $loc) || err(1, "Cannot open the folder at $loc");
 		
 		while ( my $dirfile = readdir($DIR) ) {
 			#Recall the script using the items in the directory.
@@ -196,7 +232,7 @@ sub upload {
 	}
 	else {
 		#None
-		die "File given to upload, '$loc', is neither a file nor a directory.";
+		err(1, "File given to upload, '$loc', is neither a file nor a directory.");
 	}
 	
 	return 42; #return true
