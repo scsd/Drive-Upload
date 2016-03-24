@@ -11,6 +11,7 @@ use Data::Dumper;
 
 #Make some vars
 my $errLog = "/home/nic/upload.err";
+my @cmdList;
 my @homes;			#Holds the home directories to be synced.
 my $user;
 my @ban = (			#Holds a list of files and directories to be skipped.
@@ -82,7 +83,42 @@ foreach my $home (@homes) {
 	my $out = `python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
-	&upload($id, $home, $user);
+	upload(
+		id		=> $id,
+		loc		=> $home,
+		user	=> $user
+	);
+	
+	
+	#Run the list of commands that have been collected into the '@cmdList'
+	#array. These are all of the commands to upload files to Google Drive.
+	#Array to hold pids.
+	my @cmdPids = ();
+    
+    for my $cmd (@cmdList) {
+        print "Running command: '$cmd'\n";
+        
+        my $pid = fork();
+        
+        if ($pid) {
+            push @cmdPids, $pid;
+        }
+        elsif ($pid == 0) {
+            system($cmd);
+            exit 0;
+        }
+        else {
+            die "Unable to fork: $!\n";
+        }
+    }
+    
+    print "Wait for tasks...\n";
+    for my $pid (@cmdPids) {
+        waitpid($pid, 0);
+    }
+    
+    @cmdList = ();
+	
 	
 	#Display the percentage of homes moved.
 	print ((($count / @homes) * 100) . "% completed...\n");
@@ -183,10 +219,13 @@ sub userExists {
 
 #Recursive function to upload a file or folder to google drive.
 sub upload {
+	#Get arguments.
+	my %info = @_;
+	
 	#Get the parent ID, and the loaction of the file to upload.
-	my $id =	shift || err(1, "No parent ID given in upload function.");
-	my $loc =	shift || err(1, "No file given to upload for upload function.");
-	my $user =    shift || err(1, "No user account given for upload function.");
+	my $id =	$info{'id'}		|| err(1, "No parent ID given in upload function.");
+	my $loc =	$info{'loc'}	|| err(1, "No file given to upload for upload function.");
+	my $user =	$info{'user'}	|| err(1, "No user account given for upload function.");
 	
 	#Seperate the filename from the location path
 	my $file = (split '/', $loc)[-1];
@@ -204,10 +243,8 @@ sub upload {
 	if (-f $loc) {
 		#This item is a file.
 		
-		#Replace all of the spaces with underscores.
-		
-		#Upload this file to the user's Google Drive.
-		`python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile localfile "$loc" parentid $id`;
+		#Add this to the list of commands to run.
+		push @cmdList, "python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id";
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
@@ -225,7 +262,11 @@ sub upload {
 		
 		while ( my $dirfile = readdir($DIR) ) {
 			#Recall the script using the items in the directory.
-			&upload($newid, "$loc/$dirfile", $user);
+			upload(
+				id		=> $newid,
+				loc		=> "$loc/$dirfile",
+				user	=> $user
+			);
 		}
 		
 		closedir($DIR);
