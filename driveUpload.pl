@@ -7,10 +7,12 @@ use strict;
 use warnings;
 use Data::Dumper;
 
-
+$| = 1;
 
 #Make some vars
 my $errLog = "/home/nic/upload.err";
+my $maxUploads = 7;
+my $gamLoc = "/opt/GAM-3.63/gam.py";
 my @cmdList;
 my @homes;			#Holds the home directories to be synced.
 my $user;
@@ -19,7 +21,8 @@ my @ban = (			#Holds a list of files and directories to be skipped.
 	qr/^\.(\w+)?/,
 	qr/\w+\.plist/,
 	qr/\w+\.dmg/,
-	qr/\w+\.app/
+	qr/\w+\.app/,
+	qr/^Applications/
 );
 
 
@@ -32,14 +35,16 @@ my @ban = (			#Holds a list of files and directories to be skipped.
 while (@ARGV) {
 	#Print help message.
 	if ($ARGV[0] =~ m/^--?h(elp)?/i) {&dispHelp(); exit 0;}
-	
+
 	#Set a folder to go to a specific username.
-	if ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
-	
-	
+	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
+
+	#Set the max number of files to upload.
+	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift;}
+
 	#Invaild argument
 	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {err(1, "'$1' is not a valid option\n");}
-	
+
 	#This should be a user.
 	else {
 		#Check if the item passed is a directory.
@@ -66,21 +71,21 @@ foreach my $home (@homes) {
 		my $i = 0;
 		$user = $tmp[--$i] while (!$user);
 	}
-	
-	
+
+
 	#Check if the user exists. If the user does not exist, skip them.
 	if (! userExists( $user )) {
 		err(0, "'$user' is not a valid user. Skipping...\n");
 		next;
 	}
-	
+
 	#Print out the user's name for logging.
 	print "Uploading folder $home to user $user.\n";
-	
+
 	#Make a folder in the user's Google Drive account called 'Import-[date]'.
 	#Place the user's files inside of this directory.
 	my $importFolder = "Import-" . `date "+%F"`;
-	my $out = `python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
+	my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
 	upload(
@@ -88,38 +93,29 @@ foreach my $home (@homes) {
 		loc		=> $home,
 		user	=> $user
 	);
-	
-	
+
+
 	#Run the list of commands that have been collected into the '@cmdList'
 	#array. These are all of the commands to upload files to Google Drive.
-	#Array to hold pids.
-	my @cmdPids = ();
-    
-    for my $cmd (@cmdList) {
-        print "Running command: '$cmd'\n";
-        
-        my $pid = fork();
-        
-        if ($pid) {
-            push @cmdPids, $pid;
-        }
-        elsif ($pid == 0) {
-            system($cmd);
-            exit 0;
-        }
-        else {
-            die "Unable to fork: $!\n";
-        }
-    }
-    
-    print "Wait for tasks...\n";
-    for my $pid (@cmdPids) {
-        waitpid($pid, 0);
-    }
-    
+
+	#String to hold command string.
+	my $cmd = "";
+
+	for my $i (0 .. $#cmdList) {
+        if ( ! ($i % $maxUploads) || $i == $#cmdList) {
+            print "Go\n";
+			$cmd .= "wait";
+            system("$cmd");
+            $cmd = "";
+		}
+
+		#Append the command to the string.
+		$cmd .= $cmdList[$i] . " & \n";
+	}
+
+	#Clear the command list.
     @cmdList = ();
-	
-	
+
 	#Display the percentage of homes moved.
 	print ((($count / @homes) * 100) . "% completed...\n");
 	++$count;
@@ -144,11 +140,18 @@ OPTIONS:
 	-h | --help		This help message.
 	-u | --user		Set the folders to go to a specific user instead of the
 					name of the home directory.
+	-m | --max		The max number of files to upload at one time. The default
+					is currently $maxUploads.
 
 HOMES:
 	The home directories of the user's that you want to have moved to Google
 	Drive. This assumes that the name of the home directory matches the	name
 	of the user's Google Drive account.
+
+GAM Location:
+	The variable \$gamLoc is a link to the location of where the 'gam.py' file
+	is located in your file directory. This must be changed if it moves or is
+	incorrect. It is currently set to $gamLoc'.
 
 Error Log:
 	The error log is set to be '$errLog', but this can be changed in this
@@ -163,29 +166,29 @@ END_HELP
 sub err {
 	my $fatal = shift;
 	my $in = join (', ', @_);
-	
+
 	#Make/Open the log file.
 	system("touch $errLog");
 	open(my $ERR, '>>', $errLog) or die "Cannot open the file '$errLog'";
-	
+
 	#Get the date and time.
 	my $dt = `date "+%Y/%m/%d %H:%M:%S"`;
 	chomp $dt;
-	
+
 	#Message to print.
 	my $msg = "$dt $in";
-	
+
 	#Place everything given into the log file.
 	print $ERR "$msg";
-	
+
 	#Close the log file.
 	close $ERR;
-	
+
 	if ($fatal) {
 		die "$msg";
 	}
 	else {
-		print "$msg";
+		print STDERR "$msg";
 	}
 }
 
@@ -196,21 +199,21 @@ sub userExists {
 	#Get the user
 	my ($name) = @_;
 	my $ret = 0;
-	
+
 	#Run GAM and try to get the user's info.
-	my $out = `python /opt/GAM-3.63/gam.py info user $name\@sgate.k12.mi.us userview 2>&1`;
-	
+	my $out = `python $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
+
 	#Look for the word 'error' in the output. If it is in there, the value
 	#returned will be true.
 	my $err = index( lc($out) , "error") + 1;
-	
+
 	if ( $err ) {
 		$ret = 0;
 	}
 	else {
 		$ret = "exists";
 	}
-	
+
 	return $ret; #Return a true or false.
 }
 
@@ -221,45 +224,45 @@ sub userExists {
 sub upload {
 	#Get arguments.
 	my %info = @_;
-	
+
 	#Get the parent ID, and the loaction of the file to upload.
 	my $id =	$info{'id'}		|| err(1, "No parent ID given in upload function.");
 	my $loc =	$info{'loc'}	|| err(1, "No file given to upload for upload function.");
 	my $user =	$info{'user'}	|| err(1, "No user account given for upload function.");
-	
+
 	#Seperate the filename from the location path
 	my $file = (split '/', $loc)[-1];
-	
+
 	#Skip files that match something in the ban list. Exit if it does.
 	for my $regex (@ban) {
 		if ($file =~ $regex) {
 			return 0;	#Return a false.
 		}
 	}
-	
-	print "Uploading file '$file'\n";
-	
+
 	#Determine if the file to upload is a file or dir.
 	if (-f $loc) {
 		#This item is a file.
-		
+
 		#Add this to the list of commands to run.
-		push @cmdList, "python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id";
+		print "Adding file '$file'\n";
+		push(@cmdList, "python $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id");
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
-		
+
 		#Make the folder an store the output (should look like:
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
-		my $out = `python /opt/GAM-3.63/gam.py user $user\@sgate.k12.mi.us add drivefile drivefilename "$file" mimetype gfolder parentid $id`;
+		print "Making folder '$file'\n";
+		my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$file" mimetype gfolder parentid $id`;
 		chomp $out;
 		my $newid = (split ' ', $out)[-1];
-		
+
 		#Open the directory, and for each item inside, make the Google
 	    #Drive folder for it, and call this function again.
 		opendir(my $DIR, $loc) || err(1, "Cannot open the folder at $loc");
-		
+
 		while ( my $dirfile = readdir($DIR) ) {
 			#Recall the script using the items in the directory.
 			upload(
@@ -268,14 +271,13 @@ sub upload {
 				user	=> $user
 			);
 		}
-		
+
 		closedir($DIR);
 	}
 	else {
 		#None
 		err(1, "File given to upload, '$loc', is neither a file nor a directory.");
 	}
-	
+
 	return 42; #return true
 }
-
