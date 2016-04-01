@@ -5,6 +5,7 @@
 
 use strict;
 use warnings;
+use utf8;
 use Data::Dumper;
 
 $| = 1;
@@ -12,7 +13,7 @@ $| = 1;
 #Make some vars
 my $errLog = "/home/nic/upload.err";
 my $maxUploads = 7;
-my $gamLoc = "/opt/GAM-3.63/gam.py";
+my $gamLoc = "/opt/GAM-3.65/gam.py";
 my @cmdList;
 my @homes;			#Holds the home directories to be synced.
 my $user;
@@ -117,7 +118,7 @@ foreach my $home (@homes) {
     @cmdList = ();
 
 	#Display the percentage of homes moved.
-	print ((($count / @homes) * 100) . "% completed...\n");
+	print ((($count / @homes) * 100) . "% completed...\n\n");
 	++$count;
 }
 
@@ -169,14 +170,14 @@ sub err {
 
 	#Make/Open the log file.
 	system("touch $errLog");
-	open(my $ERR, '>>', $errLog) or die "Cannot open the file '$errLog'";
+	open(my $ERR, '>>', $errLog) or die "Cannot open the error file '$errLog'";
 
 	#Get the date and time.
 	my $dt = `date "+%Y/%m/%d %H:%M:%S"`;
 	chomp $dt;
 
 	#Message to print.
-	my $msg = "$dt $in";
+	my $msg = "$dt $in\n";
 
 	#Place everything given into the log file.
 	print $ERR "$msg";
