@@ -241,6 +241,9 @@ sub upload {
 		}
 	}
 
+	#Make sure that any special chars in the '$file' var have been escaped.
+	$file =~ s/\'/\\'/g;
+
 	#Determine if the file to upload is a file or dir.
 	if (-f $loc) {
 		#This item is a file.
@@ -256,7 +259,7 @@ sub upload {
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
 		print "Making folder '$file'\n";
-		my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$file" mimetype gfolder parentid $id`;
+		my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
 		chomp $out;
 		my $newid = (split ' ', $out)[-1];
 
