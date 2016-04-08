@@ -7,17 +7,20 @@ use strict;
 use warnings;
 use utf8;
 use Data::Dumper;
+use AnyEvent;
 
 $| = 1;
 
 #Make some vars
 my $errLog = "/home/nic/upload.err";
-my $maxUploads = 7;
+my $maxUploads = 3;
 my $gamLoc = "/opt/GAM-3.65/gam.py";
+my $py = `which python2`; chomp $py;
+my $verbose = 0;
 my @cmdList;
-my @homes;			#Holds the home directories to be synced.
+my @homes;		#Holds the home directories to be synced.
 my $user;
-my @ban = (			#Holds a list of files and directories to be skipped.
+my @ban = (		#Holds a list of files and directories to be skipped.
 	qr/^Library/,
 	qr/^\.(\w+)?/,
 	qr/\w+\.plist/,
@@ -36,6 +39,9 @@ my @ban = (			#Holds a list of files and directories to be skipped.
 while (@ARGV) {
 	#Print help message.
 	if ($ARGV[0] =~ m/^--?h(elp)?/i) {&dispHelp(); exit 0;}
+
+	#Enable verbose output.
+	elsif ($ARGV[0] =~ m/^--?v(erbose)?/i) {shift; $verbose = 1;}
 
 	#Set a folder to go to a specific username.
 	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
@@ -63,7 +69,7 @@ while (@ARGV) {
 
 #Now that the user homes have been listed, all that needs to be done is to send
 #the user's account into Google Drive.
-my $count = 1;
+my $fin = 1;
 foreach my $home (@homes) {
 	#Check if the 'user' variable is set. If not, set it to the user assosciated
 	#with the current home directory.
@@ -86,7 +92,7 @@ foreach my $home (@homes) {
 	#Make a folder in the user's Google Drive account called 'Import-[date]'.
 	#Place the user's files inside of this directory.
 	my $importFolder = "Import-" . `date "+%F"`;
-	my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
+	my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
 	upload(
@@ -99,27 +105,53 @@ foreach my $home (@homes) {
 	#Run the list of commands that have been collected into the '@cmdList'
 	#array. These are all of the commands to upload files to Google Drive.
 
-	#String to hold command string.
-	my $cmd = "";
+	my $count = 0;
+	my @watchers;
+	my $done = AnyEvent->condvar;
 
-	for my $i (0 .. $#cmdList) {
-        if ( ! ($i % $maxUploads) || $i == $#cmdList) {
-            print "Go\n";
-			$cmd .= "wait";
-            system("$cmd");
-            $cmd = "";
-		}
-
-		#Append the command to the string.
-		$cmd .= $cmdList[$i] . " & \n";
+	for (1 .. $maxUploads) {
+		runUpload(\@watchers);
 	}
 
-	#Clear the command list.
-    @cmdList = ();
+	$done->recv;
+
+	sub runUpload {
+		my $watchers = shift;
+		#Make sure that no more than the max number run.
+		return if $count >= $maxUploads;
+		#Get the next command, until the list is depleated
+		my $cmd = shift @cmdList;
+		return if not $cmd;
+
+		my $pid = fork;
+		if ($pid) {
+			++$count;
+			$done->begin;
+			my $i = nextUndef(@$watchers);
+			$watchers->[$i] = AnyEvent->child(
+				pid => $pid,
+				cb  => sub {
+					--$count;
+					$done->end;
+					runUpload($watchers);
+					undef $watchers->[$i];
+				}
+			);
+		}
+		elsif (defined $pid) {
+			exec("$cmd");
+			die "Cannot exec '$cmd': $!\n";
+		}
+		else {
+			die "Nope.  :/";
+		}
+	}
+
+
 
 	#Display the percentage of homes moved.
-	print ((($count / @homes) * 100) . "% completed...\n\n");
-	++$count;
+	print ((($fin / @homes) * 100) . "% completed...\n\n");
+	++$fin;
 }
 
 
@@ -139,6 +171,7 @@ USAGE: $0 [OPTIONS] [HOMES]
 
 OPTIONS:
 	-h | --help		This help message.
+	-v | --verbose	Display everything that is being done by the script.
 	-u | --user		Set the folders to go to a specific user instead of the
 					name of the home directory.
 	-m | --max		The max number of files to upload at one time. The default
@@ -161,6 +194,23 @@ Error Log:
 END_HELP
 }
 
+
+#Function to return the next undefined variable in an array.
+sub nextUndef {
+	my @a = @_;
+	my $i = 0;
+	while (++$i) {
+		unless (defined $a[$i]) {
+			return $i;
+		}
+	}
+}
+
+
+sub quietCmd {
+	if ($verbose) {return '';}
+	else {return ' >/dev/null';}
+}
 
 
 #Function to write errors to to a log file with a date.
@@ -202,7 +252,7 @@ sub userExists {
 	my $ret = 0;
 
 	#Run GAM and try to get the user's info.
-	my $out = `python $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
+	my $out = `$py $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
 
 	#Look for the word 'error' in the output. If it is in there, the value
 	#returned will be true.
@@ -249,8 +299,8 @@ sub upload {
 		#This item is a file.
 
 		#Add this to the list of commands to run.
-		print "Adding file '$file'\n";
-		push(@cmdList, "python $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id");
+		print "Adding file '$file'\n" if $verbose;
+		push(@cmdList, "$py $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id" . quietCmd());
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
@@ -258,8 +308,8 @@ sub upload {
 		#Make the folder an store the output (should look like:
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
-		print "Making folder '$file'\n";
-		my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
+		print "Making folder '$file'\n" if $verbose;
+		my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
 		chomp $out;
 		my $newid = (split ' ', $out)[-1];
 
