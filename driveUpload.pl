@@ -28,6 +28,7 @@ my @ban = (		#Holds a list of files and directories to be skipped.
 	qr/\w+\.app/,
 	qr/^Applications/
 );
+my $banSpecial = qr/[\~\$\&\\\*\!\"]\ ?/;
 
 
 
@@ -291,8 +292,16 @@ sub upload {
 		}
 	}
 
-	#Make sure that any special chars in the '$file' var have been escaped.
-	$file =~ s/\'/\\'/g;
+	#Rename any files that will cause an error when uploading.
+	if ($file =~ s/$banSpecial//g) {
+		my $newLoc;
+		my @tmp = split '/', $loc;
+		pop @tmp;
+		push @tmp, $file;
+		$newLoc = join('/', @tmp);
+		rename "$loc", "$newLoc";
+		$loc = $newLoc;
+	}
 
 	#Determine if the file to upload is a file or dir.
 	if (-f $loc) {
