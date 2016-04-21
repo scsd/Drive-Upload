@@ -13,7 +13,7 @@ $| = 1;
 
 #Make some vars
 my $errLog = "/home/nic/upload.err";
-my $maxUploads = 3;
+my $maxUploads = 5;
 my $gamLoc = "/opt/GAM-3.65/gam.py";
 my $py = `which python2`; chomp $py;
 my $verbose = 0;
@@ -21,12 +21,18 @@ my @cmdList;
 my @homes;		#Holds the home directories to be synced.
 my $user;
 my @ban = (		#Holds a list of files and directories to be skipped.
-	qr/^Library/,
+	qr/^[Ll]ib(rary)?$/,
 	qr/^\.(\w+)?/,
-	qr/\w+\.plist/,
-	qr/\w+\.dmg/,
-	qr/\w+\.app/,
-	qr/^Applications/
+	qr/\w+\.plist$/,
+	qr/\w+\.dmg$/,
+	qr/\w+\.app$/,
+	qr/^Applications$/,
+	qr/^[A-Za-z]+ User Data$/,
+	qr/^Google Drive$/,
+	qr/^[Cc]ache$/,
+	qr/\w+\.cache$/,
+	qr/\w+\.bin$/,
+	qr/\w+\.part$/,
 );
 my $banSpecial = qr/[\~\$\&\\\*\!\"]\ ?/;
 
