@@ -18,14 +18,19 @@ my $verbose = 0;
 my @cmdList;
 my @homes;			#Holds the home directories to be synced.
 my $user;
-my @ban = (			#Holds a list of files and directories to be skipped.
-	qr/^Library/,
+my @ban = (		#Holds a list of files and directories to be skipped.
+	qr/^[Ll]ib(rary)?$/,
 	qr/^\.(\w+)?/,
-	qr/\w+\.plist/,
-	qr/\w+\.dmg/,
-	qr/\w+\.app/,
-	qr/^Applications/,
-	qr/^Caches?/
+	qr/\w+\.plist$/,
+	qr/\w+\.dmg$/,
+	qr/\w+\.app$/,
+	qr/^Applications$/,
+	qr/^[A-Za-z]+ User Data$/,
+	qr/^Google Drive$/,
+	qr/^[Cc]ache$/,
+	qr/\w+\.cache$/,
+	qr/\w+\.bin$/,
+	qr/\w+\.part$/,
 );
 my $banSpecial = qr/[\~\$\&\\\*\!\"]\ ?/;
 
