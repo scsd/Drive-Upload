@@ -116,9 +116,13 @@ foreach my $home (@homes) {
 	my @watchers;
 	my $done = AnyEvent->condvar;
 
+	#Start the count incase there are no folders to upload.
+	$done->begin;
 	for (1 .. $maxUploads) {
 		runUpload(\@watchers);
 	}
+	#End the count.
+	$done->end;
 
 	$done->recv;
 
