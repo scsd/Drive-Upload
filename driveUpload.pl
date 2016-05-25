@@ -12,15 +12,26 @@ use AnyEvent;
 $| = 1;
 
 #Make some vars
+#Location of the error log.
 my $errLog = "/home/nic/upload.err";
+#Maximum amount of files to upload at a time.
 my $maxUploads = 5;
+#Location of the GAM script.
 my $gamLoc = "/opt/GAM-3.65/gam.py";
+#Location of python v2.
 my $py = `which python2`; chomp $py;
-my $verbose = 0;
+#Enable verbose mode.
+my $verbose = 1;
+#Array to hold the commands to send to the shell.
 my @cmdList;
-my @homes;		#Holds the home directories to be synced.
+#Holds the home directories to be synced.
+my @homes;
+#What user to send the files to.
 my $user;
-my @ban = (		#Holds a list of files and directories to be skipped.
+#Will hold a condition variable.
+my $done;
+#Holds a list of files and directories to be skipped.
+my @ban = (
 	qr/^[Ll]ib(rary)?$/,
 	qr/^\.(\w+)?/,
 	qr/\w+\.plist$/,
@@ -34,6 +45,7 @@ my @ban = (		#Holds a list of files and directories to be skipped.
 	qr/\w+\.bin$/,
 	qr/\w+\.part$/,
 );
+#Regex to remove any really bad special chars in files.
 my $banSpecial = qr/[\~\$\&\\\*\!\"]\ ?/;
 
 
@@ -48,7 +60,7 @@ while (@ARGV) {
 	if ($ARGV[0] =~ m/^--?h(elp)?/i) {&dispHelp(); exit 0;}
 
 	#Enable verbose output.
-	elsif ($ARGV[0] =~ m/^--?v(erbose)?/i) {shift; $verbose = 1;}
+	elsif ($ARGV[0] =~ m/^--?q(uiet)?/i) {shift; $verbose = 0;}
 
 	#Set a folder to go to a specific username.
 	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
@@ -114,7 +126,7 @@ foreach my $home (@homes) {
 
 	my $count = 0;
 	my @watchers;
-	my $done = AnyEvent->condvar;
+	$done = AnyEvent->condvar;
 
 	#Start the count incase there are no folders to upload.
 	$done->begin;
@@ -131,7 +143,8 @@ foreach my $home (@homes) {
 		#Make sure that no more than the max number run.
 		return if $count >= $maxUploads;
 		#Get the next command, until the list is depleated
-		my $cmd = shift @cmdList;
+		my $cmd;
+		$cmd = shift @cmdList while (@cmdList && not $cmd);
 		return if not $cmd;
 
 		my $pid = fork;
@@ -143,8 +156,8 @@ foreach my $home (@homes) {
 				pid => $pid,
 				cb  => sub {
 					--$count;
-					$done->end;
 					runUpload($watchers);
+					$done->end;
 					undef $watchers->[$i];
 				}
 			);
@@ -158,7 +171,8 @@ foreach my $home (@homes) {
 		}
 	}
 
-
+	#Clear out the condvar.
+	undef $done;
 
 	#Display the percentage of homes moved.
 	print ((($fin / @homes) * 100) . "% completed...\n\n");
@@ -182,7 +196,7 @@ USAGE: $0 [OPTIONS] [HOMES]
 
 OPTIONS:
 	-h | --help		This help message.
-	-v | --verbose	Display everything that is being done by the script.
+	-q | --quiet	Display everything that is being done by the script.
 	-u | --user		Set the folders to go to a specific user instead of the
 					name of the home directory.
 	-m | --max		The max number of files to upload at one time. The default
@@ -349,7 +363,7 @@ sub upload {
 	}
 	else {
 		#None
-		err(1, "File given to upload, '$loc', is neither a file nor a directory.");
+		err(0, "File given to upload, '$loc', is neither a file nor a directory.");
 	}
 
 	return 42; #return true
