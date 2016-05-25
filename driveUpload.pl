@@ -196,7 +196,8 @@ USAGE: $0 [OPTIONS] [HOMES]
 
 OPTIONS:
 	-h | --help		This help message.
-	-q | --quiet	Display everything that is being done by the script.
+	-q | --quiet	This option will make the script output very little text,
+					instead of everything that it is doing.
 	-u | --user		Set the folders to go to a specific user instead of the
 					name of the home directory.
 	-m | --max		The max number of files to upload at one time. The default

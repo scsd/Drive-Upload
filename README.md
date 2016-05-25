@@ -3,10 +3,10 @@ Script to send a user's home directory to Google Drive.
 
 ## Installation Notes
 ###GAM
-This script uses the [GAM](https://github.com/jay0lee/GAM) software to upload the files and to check for users. This software **must** be installed first and be working before this script will do anything. There is a variable at the top of the script of where it thinks it should be. Change this if it is wrong.
+This script uses the [GAM](https://github.com/jay0lee/GAM) software to upload the files and to check for users. This software **must** be installed first and be working before this script will do anything. There is a variable at the top of the script of where it thinks it should be.
 
 ###AnyEvent
-This script also requires the [AnyEvent](https://metacpan.org/pod/AnyEvent) Perl module to work. This module it used for running multiple GAM uploads at a time.
+This script also requires the [AnyEvent](https://metacpan.org/pod/AnyEvent) Perl module to work. This module is used for running multiple GAM uploads at a time.
 
 ###Variable Configuration
 The top half of the script consists of configuration items and default values for variables. Most of these have an option to set them on the command line, but some do not. The two that do not and that may need to configured based on preference/restrictions are the variables:
@@ -24,4 +24,4 @@ USAGE: `./driveUpload.pl [OPTIONS] [HOMES]`
 * `-m | --max` - Sets the max number of files to upload at one time.
 
 ###Home Directories
-This is a list of all of the directories that will be uploaded to Google drive. If any files are passed, this script will skip them. For example, if I passed `/dir/dummy_dir` and `/dir/file.txt` to the script, the directory `/dir/dummy_dir` will be uploaded and `/dir/file.txt` will be skipped. Because of how this script handles directories, this script can actually be used to upload a directory and any files within to a person's Google Drive account while maintaining the file structure.
+This is a list of all of the directories that will be uploaded to Google drive. If any files are passed, this script will skip them. For example, if I passed `/dir/dummy_dir` and `/dir/file.txt` to the script, the directory `/dir/dummy_dir` will be uploaded and `/dir/file.txt` will be skipped. Because of how this script handles directories, this script can actually be used to upload a directory (and any files within) to a person's Google Drive account, while maintaining the file structure.
