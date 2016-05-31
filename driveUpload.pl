@@ -6,6 +6,7 @@
 use strict;
 use warnings;
 use utf8;
+use Data::Dumper;
 
 $| = 1;
 
@@ -13,8 +14,6 @@ $| = 1;
 my $errLog = "/home/nic/upload.err";
 my $maxUploads = 7;
 my $gamLoc = "/opt/GAM-3.65/gam.py";
-my $py = `which python2`; chomp $py;
-my $verbose = 0;
 my @cmdList;
 my @homes;			#Holds the home directories to be synced.
 my $user;
@@ -43,9 +42,6 @@ while (@ARGV) {
 
 	#Set the max number of files to upload.
 	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift;}
-
-	#Enable verbose mode
-	elsif ($ARGV[0] =~ m/^--?v(erbose)?/i) {shift; $verbose = 1;}
 
 	#Invaild argument
 	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {err(1, "'$1' is not a valid option\n");}
@@ -86,12 +82,11 @@ foreach my $home (@homes) {
 
 	#Print out the user's name for logging.
 	print "Uploading folder $home to user $user.\n";
-	print "Indexing files...\n";
 
 	#Make a folder in the user's Google Drive account called 'Import-[date]'.
 	#Place the user's files inside of this directory.
 	my $importFolder = "Import-" . `date "+%F"`;
-	my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
+	my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
 	upload(
@@ -105,11 +100,11 @@ foreach my $home (@homes) {
 	#array. These are all of the commands to upload files to Google Drive.
 
 	#String to hold command string.
-	my $cmd = "echo 'Begin upload...' & \n";
+	my $cmd = "";
 
 	for my $i (0 .. $#cmdList) {
         if ( ! ($i % $maxUploads) || $i == $#cmdList) {
-            print "Go\n" if $verbose;
+            print "Go\n";
 			$cmd .= "wait";
             system("$cmd");
             $cmd = "";
@@ -123,7 +118,7 @@ foreach my $home (@homes) {
     @cmdList = ();
 
 	#Display the percentage of homes moved.
-	print ((($count / @homes) * 100) . "% completed.\n\n");
+	print ((($count / @homes) * 100) . "% completed...\n\n");
 	++$count;
 }
 
@@ -144,7 +139,6 @@ USAGE: $0 [OPTIONS] [HOMES]
 
 OPTIONS:
 	-h | --help		This help message.
-	-v | --verbose	Display everything the script is doing.
 	-u | --user		Set the folders to go to a specific user instead of the
 					name of the home directory.
 	-m | --max		The max number of files to upload at one time. The default
@@ -167,12 +161,6 @@ Error Log:
 END_HELP
 }
 
-
-#Function to silece the output of commands.
-sub quietCmd {
-	if ($verbose) {return '';}
-	else {return ' >/dev/null';}
-}
 
 
 #Function to write errors to to a log file with a date.
@@ -214,7 +202,7 @@ sub userExists {
 	my $ret = 0;
 
 	#Run GAM and try to get the user's info.
-	my $out = `$py $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
+	my $out = `python $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
 
 	#Look for the word 'error' in the output. If it is in there, the value
 	#returned will be true.
@@ -261,8 +249,8 @@ sub upload {
 		#This item is a file.
 
 		#Add this to the list of commands to run.
-		print "Adding file '$file'\n" if $verbose;
-		push(@cmdList, "$py $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id" . quietCmd);
+		print "Adding file '$file'\n";
+		push(@cmdList, "python $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id");
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
@@ -270,8 +258,8 @@ sub upload {
 		#Make the folder an store the output (should look like:
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
-		print "Making folder '$file'\n" if $verbose;
-		my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
+		print "Making folder '$file'\n";
+		my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
 		chomp $out;
 		my $newid = (split ' ', $out)[-1];
 
