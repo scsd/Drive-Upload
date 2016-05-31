@@ -8,10 +8,14 @@ use warnings;
 use utf8;
 use Data::Dumper;
 use AnyEvent;
+use Email::MIME;
+use Email::Sender::Simple qw(sendmail);
 
 $| = 1;
 
 #Make some vars
+#Email address to send errors to.
+my $address = "";
 #Location of the error log.
 my $errLog = "/home/nic/upload.err";
 #Maximum amount of files to upload at a time.
@@ -59,7 +63,7 @@ while (@ARGV) {
 	#Print help message.
 	if ($ARGV[0] =~ m/^--?h(elp)?/i) {&dispHelp(); exit 0;}
 
-	#Enable verbose output.
+	#Disable verbose output.
 	elsif ($ARGV[0] =~ m/^--?q(uiet)?/i) {shift; $verbose = 0;}
 
 	#Set a folder to go to a specific username.
@@ -67,6 +71,9 @@ while (@ARGV) {
 
 	#Set the max number of files to upload.
 	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift;}
+
+	#Set the email address to send errors to.
+	elsif ($ARGV[0] =~ m/^--?a(ddress)?/i) {shift; $address = shift;}
 
 	#Invaild argument
 	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {err(1, "'$1' is not a valid option\n");}
@@ -202,6 +209,7 @@ OPTIONS:
 					name of the home directory.
 	-m | --max		The max number of files to upload at one time. The default
 					is currently $maxUploads.
+	-a | --address	Email address to send error messages to.
 
 HOMES:
 	The home directories of the user's that you want to have moved to Google
@@ -253,13 +261,33 @@ sub err {
 	chomp $dt;
 
 	#Message to print.
-	my $msg = "$dt $in\n";
+	my $msg = "$dt - $in\n";
 
 	#Place everything given into the log file.
 	print $ERR "$msg";
 
 	#Close the log file.
 	close $ERR;
+
+	if ($address) {
+		#Send an email of the log to the address specified.
+		#Write the contents of the email.
+		my $email = Email::MIME->create(
+			header_str	=> [
+				From	=> 'driveupload@localhost',
+				To		=> $address,
+				Subject	=> 'Upload script error'
+			],
+			attributes	=> {
+    			encoding	=> 'quoted-printable',
+    			charset		=> 'UTF-8',
+  			},
+			body_str	=> $msg
+		);
+
+		#Send the email.
+		sendmail($email);
+	}
 
 	if ($fatal) {
 		die "$msg";

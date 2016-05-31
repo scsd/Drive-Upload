@@ -22,6 +22,7 @@ USAGE: `./driveUpload.pl [OPTIONS] [HOMES]`
 * `-q | --quiet` - This option will make the script output very little text, instead of everything that it is doing.
 * `-u | --user` - Option to have the folders to go to a specific user instead of the owner of the home directory.
 * `-m | --max` - Sets the max number of files to upload at one time.
+* `-a | --address` - This option will set the email address that error logs should send messages to. If left blank, no emails will be sent.
 
 ###Home Directories
 This is a list of all of the directories that will be uploaded to Google drive. If any files are passed, this script will skip them. For example, if I passed `/dir/dummy_dir` and `/dir/file.txt` to the script, the directory `/dir/dummy_dir` will be uploaded and `/dir/file.txt` will be skipped. Because of how this script handles directories, this script can actually be used to upload a directory (and any files within) to a person's Google Drive account, while maintaining the file structure.
