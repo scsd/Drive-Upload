@@ -7,24 +7,50 @@ use strict;
 use warnings;
 use utf8;
 use Data::Dumper;
+use AnyEvent;
+use Email::MIME;
+use Email::Sender::Simple qw(sendmail);
 
 $| = 1;
 
 #Make some vars
+#Email address to send errors to.
+my $address = "";
+#Location of the error log.
 my $errLog = "/home/nic/upload.err";
-my $maxUploads = 7;
+#Maximum amount of files to upload at a time.
+my $maxUploads = 5;
+#Location of the GAM script.
 my $gamLoc = "/opt/GAM-3.65/gam.py";
+#Location of python v2.
+my $py = `which python2`; chomp $py;
+#Enable verbose mode.
+my $verbose = 1;
+#Array to hold the commands to send to the shell.
 my @cmdList;
-my @homes;			#Holds the home directories to be synced.
+#Holds the home directories to be synced.
+my @homes;
+#What user to send the files to.
 my $user;
-my @ban = (			#Holds a list of files and directories to be skipped.
-	qr/^Library/,
+#Will hold a condition variable.
+my $done;
+#Holds a list of files and directories to be skipped.
+my @ban = (
+	qr/^[Ll]ib(rary)?$/,
 	qr/^\.(\w+)?/,
-	qr/\w+\.plist/,
-	qr/\w+\.dmg/,
-	qr/\w+\.app/,
-	qr/^Applications/
+	qr/\w+\.plist$/,
+	qr/\w+\.dmg$/,
+	qr/\w+\.app$/,
+	qr/^Applications$/,
+	qr/^[A-Za-z]+ User Data$/,
+	qr/^Google Drive$/,
+	qr/^[Cc]ache$/,
+	qr/\w+\.cache$/,
+	qr/\w+\.bin$/,
+	qr/\w+\.part$/,
 );
+#Regex to remove any really bad special chars in files.
+my $banSpecial = qr/[\~\$\&\\\*\!\"]\ ?/;
 
 
 
@@ -37,11 +63,17 @@ while (@ARGV) {
 	#Print help message.
 	if ($ARGV[0] =~ m/^--?h(elp)?/i) {&dispHelp(); exit 0;}
 
+	#Disable verbose output.
+	elsif ($ARGV[0] =~ m/^--?q(uiet)?/i) {shift; $verbose = 0;}
+
 	#Set a folder to go to a specific username.
 	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
 
 	#Set the max number of files to upload.
 	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift;}
+
+	#Set the email address to send errors to.
+	elsif ($ARGV[0] =~ m/^--?a(ddress)?/i) {shift; $address = shift;}
 
 	#Invaild argument
 	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {err(1, "'$1' is not a valid option\n");}
@@ -63,7 +95,7 @@ while (@ARGV) {
 
 #Now that the user homes have been listed, all that needs to be done is to send
 #the user's account into Google Drive.
-my $count = 1;
+my $fin = 1;
 foreach my $home (@homes) {
 	#Check if the 'user' variable is set. If not, set it to the user assosciated
 	#with the current home directory.
@@ -86,7 +118,7 @@ foreach my $home (@homes) {
 	#Make a folder in the user's Google Drive account called 'Import-[date]'.
 	#Place the user's files inside of this directory.
 	my $importFolder = "Import-" . `date "+%F"`;
-	my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
+	my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
 	upload(
@@ -99,27 +131,59 @@ foreach my $home (@homes) {
 	#Run the list of commands that have been collected into the '@cmdList'
 	#array. These are all of the commands to upload files to Google Drive.
 
-	#String to hold command string.
-	my $cmd = "";
+	my $count = 0;
+	my @watchers;
+	$done = AnyEvent->condvar;
 
-	for my $i (0 .. $#cmdList) {
-        if ( ! ($i % $maxUploads) || $i == $#cmdList) {
-            print "Go\n";
-			$cmd .= "wait";
-            system("$cmd");
-            $cmd = "";
+	#Start the count incase there are no folders to upload.
+	$done->begin;
+	for (1 .. $maxUploads) {
+		runUpload(\@watchers);
+	}
+	#End the count.
+	$done->end;
+
+	$done->recv;
+
+	sub runUpload {
+		my $watchers = shift;
+		#Make sure that no more than the max number run.
+		return if $count >= $maxUploads;
+		#Get the next command, until the list is depleated
+		my $cmd;
+		$cmd = shift @cmdList while (@cmdList && not $cmd);
+		return if not $cmd;
+
+		my $pid = fork;
+		if ($pid) {
+			++$count;
+			$done->begin;
+			my $i = nextUndef(@$watchers);
+			$watchers->[$i] = AnyEvent->child(
+				pid => $pid,
+				cb  => sub {
+					--$count;
+					runUpload($watchers);
+					$done->end;
+					undef $watchers->[$i];
+				}
+			);
 		}
-
-		#Append the command to the string.
-		$cmd .= $cmdList[$i] . " & \n";
+		elsif (defined $pid) {
+			exec("$cmd");
+			die "Cannot exec '$cmd': $!\n";
+		}
+		else {
+			die "Nope.  :/";
+		}
 	}
 
-	#Clear the command list.
-    @cmdList = ();
+	#Clear out the condvar.
+	undef $done;
 
 	#Display the percentage of homes moved.
-	print ((($count / @homes) * 100) . "% completed...\n\n");
-	++$count;
+	print ((($fin / @homes) * 100) . "% completed...\n\n");
+	++$fin;
 }
 
 
@@ -139,10 +203,13 @@ USAGE: $0 [OPTIONS] [HOMES]
 
 OPTIONS:
 	-h | --help		This help message.
+	-q | --quiet	This option will make the script output very little text,
+					instead of everything that it is doing.
 	-u | --user		Set the folders to go to a specific user instead of the
 					name of the home directory.
 	-m | --max		The max number of files to upload at one time. The default
 					is currently $maxUploads.
+	-a | --address	Email address to send error messages to.
 
 HOMES:
 	The home directories of the user's that you want to have moved to Google
@@ -162,6 +229,23 @@ END_HELP
 }
 
 
+#Function to return the next undefined variable in an array.
+sub nextUndef {
+	my @a = @_;
+	my $i = 0;
+	while (++$i) {
+		unless (defined $a[$i]) {
+			return $i;
+		}
+	}
+}
+
+
+sub quietCmd {
+	if ($verbose) {return '';}
+	else {return ' >/dev/null';}
+}
+
 
 #Function to write errors to to a log file with a date.
 sub err {
@@ -177,13 +261,33 @@ sub err {
 	chomp $dt;
 
 	#Message to print.
-	my $msg = "$dt $in\n";
+	my $msg = "$dt - $in\n";
 
 	#Place everything given into the log file.
 	print $ERR "$msg";
 
 	#Close the log file.
 	close $ERR;
+
+	if ($address) {
+		#Send an email of the log to the address specified.
+		#Write the contents of the email.
+		my $email = Email::MIME->create(
+			header_str	=> [
+				From	=> 'driveupload@localhost',
+				To		=> $address,
+				Subject	=> 'Upload script error'
+			],
+			attributes	=> {
+    			encoding	=> 'quoted-printable',
+    			charset		=> 'UTF-8',
+  			},
+			body_str	=> $msg
+		);
+
+		#Send the email.
+		sendmail($email);
+	}
 
 	if ($fatal) {
 		die "$msg";
@@ -202,7 +306,7 @@ sub userExists {
 	my $ret = 0;
 
 	#Run GAM and try to get the user's info.
-	my $out = `python $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
+	my $out = `$py $gamLoc info user $name\@sgate.k12.mi.us userview 2>&1`;
 
 	#Look for the word 'error' in the output. If it is in there, the value
 	#returned will be true.
@@ -241,16 +345,24 @@ sub upload {
 		}
 	}
 
-	#Make sure that any special chars in the '$file' var have been escaped.
-	$file =~ s/\'/\\'/g;
+	#Rename any files that will cause an error when uploading.
+	if ($file =~ s/$banSpecial//g) {
+		my $newLoc;
+		my @tmp = split '/', $loc;
+		pop @tmp;
+		push @tmp, $file;
+		$newLoc = join('/', @tmp);
+		rename "$loc", "$newLoc";
+		$loc = $newLoc;
+	}
 
 	#Determine if the file to upload is a file or dir.
 	if (-f $loc) {
 		#This item is a file.
 
 		#Add this to the list of commands to run.
-		print "Adding file '$file'\n";
-		push(@cmdList, "python $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id");
+		print "Adding file '$file'\n" if $verbose;
+		push(@cmdList, "$py $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id" . quietCmd());
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
@@ -258,8 +370,8 @@ sub upload {
 		#Make the folder an store the output (should look like:
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
-		print "Making folder '$file'\n";
-		my $out = `python $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
+		print "Making folder '$file'\n" if $verbose;
+		my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
 		chomp $out;
 		my $newid = (split ' ', $out)[-1];
 
@@ -280,7 +392,7 @@ sub upload {
 	}
 	else {
 		#None
-		err(1, "File given to upload, '$loc', is neither a file nor a directory.");
+		err(0, "File given to upload, '$loc', is neither a file nor a directory.");
 	}
 
 	return 42; #return true
