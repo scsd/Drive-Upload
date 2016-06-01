@@ -13,6 +13,8 @@ The top half of the script consists of configuration items and default values fo
 * `$errLog` - The location to write the error logs
 * `$gamLoc` - The location of the `gam.py` file in the GAM installation
 
+###Testing
+This script has a directory called 't' that stores tests for the script. If you would like to use these scripts, please change the variables found inside of the file called 'config'. Run the script 'bench.sh' to begin the tests, and an email report should be sent to the address listed in the 'config' file.
 
 ## Usage
 USAGE: `./driveUpload.pl [OPTIONS] [HOMES]`
