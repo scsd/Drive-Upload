@@ -152,7 +152,7 @@ foreach my $home (@homes) {
 		#Get the next command, until the list is depleated
 		my $cmd;
 		$cmd = shift @cmdList while (@cmdList && not $cmd);
-		return if not $cmd;
+		return unless $cmd;
 
 		my $pid = fork;
 		if ($pid) {
@@ -168,13 +168,13 @@ foreach my $home (@homes) {
 					undef $watchers->[$i];
 				}
 			);
+
 		}
 		elsif (defined $pid) {
-			exec("$cmd");
-			die "Cannot exec '$cmd': $!\n";
+			exec("$cmd") || err(1, "Cannot exec '$cmd': $!\n");
 		}
 		else {
-			die "Nope.  :/";
+			err(1, "Nope.  :/");
 		}
 	}
 
