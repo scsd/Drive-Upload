@@ -171,7 +171,8 @@ foreach my $home (@homes) {
 
 		}
 		elsif (defined $pid) {
-			exec("$cmd") || err(1, "Cannot exec '$cmd': $!\n");
+			system("$cmd");
+			err(1, "Cannot run '$cmd': $!\n") if ($? != 0);
 		}
 		else {
 			err(1, "Nope.  :/");

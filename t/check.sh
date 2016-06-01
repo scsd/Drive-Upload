@@ -20,24 +20,25 @@ if [[ "$added" -ne "$uploads" ]]; then
     diff=`comm -3 tmp_index tmp_upload`
     rm tmp_upload tmp_index
     echo "$diff" >> "$log"
-    i=0
-    sum=""
-    for name in $diff;
-    do
-        #Check how many lines in each file.
-        if [[ `wc -l "$name" | perl -ne 'print "$1" if (m/^(\d+) /)'` -ne 0 ]]; then
-            i=$((i+1))
-            sum="$name, $sum"
-        fi
-    done
-    #If any of the files were not blank, there was an error.
-    if [[ "$i" -gt 0 ]]; then
-        echo "Error: Some files did not upload properly: $sum" >> "$log"
-        exit 1
-    else
-        echo "Some blank files were skipped: $sum" >> "$log"
-        exit 0
-    fi
+    exit 1
+    # i=0
+    # sum=""
+    # for name in $diff;
+    # do
+    #     #Check how many lines in each file.
+    #     if [[ `wc -l "$name" | perl -ne 'print "$1" if (m/^(\d+) /)'` -ne 0 ]]; then
+    #         i=$((i+1))
+    #         sum="$name, $sum"
+    #     fi
+    # done
+    # #If any of the files were not blank, there was an error.
+    # if [[ "$i" -gt 0 ]]; then
+    #     echo "Error: Some files did not upload properly: $sum" >> "$log"
+    #     exit 1
+    # else
+    #     echo "Some blank files were skipped: $sum" >> "$log"
+    #     exit 0
+    # fi
 fi
 
 exit 0

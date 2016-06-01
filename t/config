@@ -1,6 +1,5 @@
 #!/bin/bash
 
-branches="master"
-loc="/home/nic/tmp/testdir/small"
+loc="/home/nic/tmp"
 user="quozientn"
 address="quozientn@sgate.k12.mi.us"
