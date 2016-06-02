@@ -11,13 +11,12 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$DIR"/
 
 #Figure out the name of the output file
-file="run_$branch.log"
-#Make sure we are in the right branch
-git checkout "$branch"
+file="run.log"
+errLog="run.err"
 #Start the timer
 begin=`date "+%s"`
 #Run the script
-../driveUpload.pl -a "$address" -m 9 -u "$user" $loc &> "$file"
+../driveUpload.pl -a "$address" -e "$errLog" -m "$uploads" -u "$user" $loc &> "$file"
 #Get exit code
 codeUpload="$?"
 #End the timer
@@ -27,6 +26,7 @@ totalTime=`echo "$end-$begin" | bc`
 echo "Script took $totalTime seconds to run." >> "$file"
 #Get how big the filesystem uploaded is.
 du -sh $loc >> "$file"
+echo "" >> "$file"
 ./check.sh "$file"
 codeCheck="$?"
 #Send a notification when done
@@ -41,8 +41,12 @@ else
         echo "The checks failed with code: $codeCheck" >> "$file"
     fi
     notify-send -u critical "$branch branch upload" "Upload Failed, error code: $code"
-    cat "$file" | mail -s "$branch branch upload failed" "$address"
+    cat "$file" | mail -s "Upload test failed - log" "$address"
+    cat "$errLog" | mail -s "Upload test failed - errors" "$address"
 fi
 
 #Compose a small analisys of the uploads
-tail -n 15 run_* | mail -s "Branch Benchmark Analisys" "$address"
+tail -n 15 "$file" "$errLog" | mail -s "Branch Benchmark Analisys" "$address"
+
+#Clean up.
+rm "$file" "$errLog"
