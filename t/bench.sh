@@ -27,7 +27,7 @@ echo "Script took $totalTime seconds to run." >> "$file"
 #Get how big the filesystem uploaded is.
 du -sh $loc >> "$file"
 echo "" >> "$file"
-./check.sh "$file"
+./check.sh "$file" "$errLog"
 codeCheck="$?"
 #Send a notification when done
 if [[ $codeUpload -eq 0 && $codeCheck -eq 0 ]]; then
@@ -46,7 +46,7 @@ else
 fi
 
 #Compose a small analisys of the uploads
-tail -n 15 "$file" "$errLog" | mail -s "Branch Benchmark Analisys" "$address"
+tail -n 15 "$file" | mail -s "Branch Benchmark Analisys" "$address"
 
 #Clean up.
 rm "$file" "$errLog"
