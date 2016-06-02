@@ -151,7 +151,7 @@ foreach my $home (@homes) {
 		return if $count >= $maxUploads;
 		#Get the next command, until the list is depleated
 		my $cmd;
-		$cmd = shift @cmdList while (@cmdList && not $cmd);
+		$cmd = shift(@cmdList) while (@cmdList && not $cmd);
 		return unless $cmd;
 
 		my $pid = fork;
@@ -171,8 +171,7 @@ foreach my $home (@homes) {
 
 		}
 		elsif (defined $pid) {
-			system("$cmd");
-			err(1, "Cannot run '$cmd': $!\n") if ($? != 0);
+			err(1, "Cannot run '$cmd': ", exec("$cmd"));
 		}
 		else {
 			err(1, "Nope.  :/");
