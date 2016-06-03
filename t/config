@@ -1,5 +1,6 @@
 #!/bin/bash
 
-loc="/home/nic/tmp"
+loc="/home/nic/tmp/testdir /mnt/Staff_fs/cobbm1/"
 user="quozientn"
 address="quozientn@sgate.k12.mi.us"
+uploads=9

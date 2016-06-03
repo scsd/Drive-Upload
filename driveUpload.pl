@@ -11,13 +11,13 @@ use AnyEvent;
 use Email::MIME;
 use Email::Sender::Simple qw(sendmail);
 
-$| = 1;
+#$| = 1;
 
 #Make some vars
 #Email address to send errors to.
 my $address = "";
 #Location of the error log.
-my $errLog = "/home/nic/upload.err";
+my $errLog = "upload.err";
 #Maximum amount of files to upload at a time.
 my $maxUploads = 5;
 #Location of the GAM script.
@@ -67,13 +67,16 @@ while (@ARGV) {
 	elsif ($ARGV[0] =~ m/^--?q(uiet)?/i) {shift; $verbose = 0;}
 
 	#Set a folder to go to a specific username.
-	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift;}
+	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift // $user;}
 
 	#Set the max number of files to upload.
-	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift;}
+	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift // $maxUploads;}
 
 	#Set the email address to send errors to.
-	elsif ($ARGV[0] =~ m/^--?a(ddress)?/i) {shift; $address = shift;}
+	elsif ($ARGV[0] =~ m/^--?a(ddress)?/i) {shift; $address = shift // $address;}
+
+	#Set the location of the log file.
+	elsif ($ARGV[0] =~ m/^--?e(rror)?/i) {shift; $errLog = shift // $errLog;}
 
 	#Invaild argument
 	elsif ($ARGV[0] =~ m/^(--?\w+)/i) {err(1, "'$1' is not a valid option\n");}
@@ -118,7 +121,7 @@ foreach my $home (@homes) {
 	#Make a folder in the user's Google Drive account called 'Import-[date]'.
 	#Place the user's files inside of this directory.
 	my $importFolder = "Import-" . `date "+%F"`;
-	my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder`;
+	my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename "$importFolder" mimetype gfolder 2>>"$errLog"`;
 	chomp $out;
 	my $id = (split ' ', $out)[-1];
 	upload(
@@ -171,7 +174,23 @@ foreach my $home (@homes) {
 
 		}
 		elsif (defined $pid) {
-			err(1, "Cannot run '$cmd': ", exec("$cmd"));
+			system("$cmd");
+			my $code = $?;
+			if ($code != 0) {
+				#Get the name of the file.
+				my $file = $1 if ($cmd =~ m/localfile \"(.*)\" parentid/);
+				#Figure out what went wrong.
+				my $error = "";
+				if (! -e $file) {$error = "File does not exist.";}
+				elsif (! -r $file) {$error = "Cannot read file.";}
+				elsif (-z $file) {$error = "File is empty.";}
+				elsif (-l $file) {$error = "File is a symbolic link.";}
+				elsif (-t $file) {$error = "The file handle is open.";}
+				elsif (-B $file) {$error = "The file is binary.";}
+				else {$error = "Unknown error. File possibly is locked."}
+				err(1, "Cannot upload '$file': $error");
+			}
+			exit;
 		}
 		else {
 			err(1, "Nope.  :/");
@@ -210,6 +229,7 @@ OPTIONS:
 	-m | --max		The max number of files to upload at one time. The default
 					is currently $maxUploads.
 	-a | --address	Email address to send error messages to.
+	-e | --error	Set the file to save errors to.
 
 HOMES:
 	The home directories of the user's that you want to have moved to Google
@@ -252,22 +272,22 @@ sub err {
 	my $fatal = shift;
 	my $in = join (', ', @_);
 
-	#Make/Open the log file.
-	system("touch $errLog");
-	open(my $ERR, '>>', $errLog) or die "Cannot open the error file '$errLog'";
-
 	#Get the date and time.
 	my $dt = `date "+%Y/%m/%d %H:%M:%S"`;
 	chomp $dt;
 
 	#Message to print.
-	my $msg = "$dt - $in\n";
+	my $msg = "$dt - [ERROR] $in\n";
+
+	#Make/Open the log file.
+	#system("touch $errLog");
+	open(my $FH, ">>", $errLog) or die "Cannot open the error file '$errLog'";
 
 	#Place everything given into the log file.
-	print $ERR "$msg";
+	print $FH "$msg";
 
 	#Close the log file.
-	close $ERR;
+	close($FH) or die "Cannot close error log.";
 
 	if ($address) {
 		#Send an email of the log to the address specified.
@@ -362,7 +382,7 @@ sub upload {
 
 		#Add this to the list of commands to run.
 		print "Adding file '$file'\n" if $verbose;
-		push(@cmdList, "$py $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id" . quietCmd());
+		push(@cmdList, "$py $gamLoc user $user\@sgate.k12.mi.us add drivefile localfile \"$loc\" parentid $id 2>>\"$errLog\"" . quietCmd());
 	}
 	elsif (-d $loc) {
 		#The item is a directory.
@@ -371,7 +391,7 @@ sub upload {
 		#'Successfully created drive file/folder ID
 		##0B5Jqy92NKCfIYkV3MGw2SFoyNzQ').
 		print "Making folder '$file'\n" if $verbose;
-		my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id`;
+		my $out = `$py $gamLoc user $user\@sgate.k12.mi.us add drivefile drivefilename \"$file\" mimetype gfolder parentid $id 2>>"$errLog"`;
 		chomp $out;
 		my $newid = (split ' ', $out)[-1];
 
