@@ -13,6 +13,8 @@ cd "$DIR"/
 #Figure out the name of the output file
 file="run.log"
 errLog="run.err"
+#Clean up.
+rm "$file" "$errLog"
 #Start the timer
 begin=`date "+%s"`
 #Run the script
@@ -31,10 +33,10 @@ echo "" >> "$file"
 codeCheck="$?"
 #Send a notification when done
 if [[ $codeUpload -eq 0 && $codeCheck -eq 0 ]]; then
-    echo "$branch upload complete"
-    notify-send -u normal "$branch branch upload" "Upload Complete"
+    echo "upload complete"
+    notify-send -u normal "Drive-Upload" "Upload completed successfully"
     #Compose a small analisys of the uploads
-    tail -n 15 "$file" "$errLog" | mail -s "Branch Benchmark Analisys" "$address"
+    tail -n 15 "$file" "$errLog" | mail -s "Benchmark Analisys" "$address"
 else
     #Check the exit codes.
     if [[ $codeUpload -ne 0 ]]; then
@@ -42,10 +44,7 @@ else
     else
         echo "The checks failed with code: $codeCheck" >> "$file"
     fi
-    notify-send -u critical "$branch branch upload" "Upload Failed, error code: $code"
+    notify-send -u critical "Drive-Upload" "Upload Failed, see logs for details."
     cat "$file" | mail -s "Upload test failed - log" "$address"
     cat "$errLog" | mail -s "Upload test failed - errors" "$address"
 fi
-
-#Clean up.
-rm "$file" "$errLog"
