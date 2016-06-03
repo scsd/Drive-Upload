@@ -33,6 +33,8 @@ codeCheck="$?"
 if [[ $codeUpload -eq 0 && $codeCheck -eq 0 ]]; then
     echo "$branch upload complete"
     notify-send -u normal "$branch branch upload" "Upload Complete"
+    #Compose a small analisys of the uploads
+    tail -n 15 "$file" "$errLog" | mail -s "Branch Benchmark Analisys" "$address"
 else
     #Check the exit codes.
     if [[ $codeUpload -ne 0 ]]; then
@@ -44,9 +46,6 @@ else
     cat "$file" | mail -s "Upload test failed - log" "$address"
     cat "$errLog" | mail -s "Upload test failed - errors" "$address"
 fi
-
-#Compose a small analisys of the uploads
-tail -n 15 "$file" | mail -s "Branch Benchmark Analisys" "$address"
 
 #Clean up.
 rm "$file" "$errLog"
