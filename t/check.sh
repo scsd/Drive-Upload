@@ -29,6 +29,8 @@ if [[ "$added" -ne "$uploads" ]]; then
         sort >tmp_upload
     comm -23 tmp_index tmp_upload >> "$errlog"
     rm tmp_upload tmp_index
+    echo "" >> "$errlog"
+    echo "" >> "$errlog"
 
     #Determine how many of each error occurs
     exist=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "File does not exist"`
