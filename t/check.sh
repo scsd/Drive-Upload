@@ -21,41 +21,39 @@ if [[ "$added" -ne "$uploads" ]]; then
     grep "Adding file" "$log" | \
         tr "'" "-" | \
         perl -ne 'print "$1\n" if (m/Adding file \-(.*)\-/)' | \
-        tr -s -c "[:alnum:]\.\-\_\n" "_" | \
+        tr -s -c "[:alnum:]\.\n" "_" | \
         sort >tmp_index
     grep "Successfully uploaded" "$log" | \
         perl -ne 'print "$1\n" if (m/Successfully uploaded (.*) to/)' | \
-        tr -s -c "[:alnum:]\.\-\_\n" "_" | \
+        tr -s -c "[:alnum:]\.\n" "_" | \
         sort >tmp_upload
     comm -23 tmp_index tmp_upload >> "$errlog"
     rm tmp_upload tmp_index
     echo "" >> "$errlog"
     echo "" >> "$errlog"
 
-    #Determine how many of each error occurs
-    exist=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "File does not exist"`
-    r=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "Cannot read file"`
-    empty=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "File is empty"`
-    sym=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "File is a symbolic link"`
-    o=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "The file handle is open"`
-    bin=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "The file is binary"`
-    ukn=`grep "\[ERROR\] Cannot" "$errlog" | grep -c "Unknown error"`
+    #Check how many of each error has happened.
+    errors=`grep "\[ERROR\]" "$errlog" | \
+        perl -pe "s/'.*'/***/; s/\d{4}\/\d{2}\/\d{2} \d{2}\:\d{2}\:\d{2} \- \[ERROR\]\s+//" | \
+        sort | \
+        uniq -c`
 
-    #Display the results
-    echo "$exist - Non-existant files" >> "$errlog"
-    echo "$r - Non-readable files" >> "$errlog"
-    echo "$empty - Empty files" >> "$errlog"
-    echo "$sym - Symbolic files" >> "$errlog"
-    echo "$o - File is open" >> "$errlog"
-    echo "$bin - Binary files" >> "$errlog"
-    echo "$ukn - Unknown errors" >> "$errlog"
+    #Check if any errors are serious.
+    serious=`echo "$errors" | \
+        grep -v "File is empty" | \
+        grep -v "is a file, skipping" | \
+        grep -v "symbolic link" | \
+        wc -l`
+
+    #Show the errors
+    echo "$errors" >> "$errlog"
 
     #check if any serious errors occured.
-    if [[ $((exist + r + o + bin + ukn)) -eq 0 ]]; then
+    if [[ "$serious" -eq 0 ]]; then
         echo "No serious errors. Nothing to worry about." >> "$log"
         exit 0
     else
-        echo $((exist + r + +o + bin + ukn + empty + sym)) " errors found!" >> "$log"
+        echo "errors found!" >> "$log"
         exit 2
     fi
 fi

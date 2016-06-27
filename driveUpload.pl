@@ -31,7 +31,7 @@ my @cmdList;
 #Holds the home directories to be synced.
 my @homes;
 #What user to send the files to.
-my $user;
+my ($user, $userChange) = ("", 0);
 #Will hold a condition variable.
 my $done;
 #Holds a list of files and directories to be skipped.
@@ -44,13 +44,23 @@ my @ban = (
 	qr/^Applications$/,
 	qr/^[A-Za-z]+ User Data$/,
 	qr/^Google Drive$/,
-	qr/^[Cc]ache$/,
+	qr/[Cc]ache/,
 	qr/\w+\.cache$/,
 	qr/\w+\.bin$/,
 	qr/\w+\.part$/,
+	qr/^Local Settings$/,
+	qr/^[Pp]rofiles?$/,
+	qr/^[Ff]onts$/,
+	qr/^[Mm]icrosoft [Oo]ffice \d{4}$/,
+	qr/^[Tt]rash$/,
+	qr/^RECYCLE.BIN$/,
+	qr/^[Mm]etadata$/,
+	qr/\w+\.download$/,
+	qr/\w+\.pictClipping$/,
+	qr/^Icon[\u{f00d} \u{00EF}]$/
 );
 #Regex to remove any really bad special chars in files.
-my $banSpecial = qr/[\~\$\&\\\*\!\"]\ ?/;
+my $banSpecial = qr/[\~\$\&\\\*\!\"\`]\ ?/;
 
 
 
@@ -67,7 +77,7 @@ while (@ARGV) {
 	elsif ($ARGV[0] =~ m/^--?q(uiet)?/i) {shift; $verbose = 0;}
 
 	#Set a folder to go to a specific username.
-	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift // $user;}
+	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; if (shift) {$user = $_; $userChange = 1;} }
 
 	#Set the max number of files to upload.
 	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift // $maxUploads;}
@@ -112,6 +122,7 @@ foreach my $home (@homes) {
 	#Check if the user exists. If the user does not exist, skip them.
 	if (! userExists( $user )) {
 		err(0, "'$user' is not a valid user. Skipping...\n");
+		$user = "" unless ($userChange);
 		next;
 	}
 
@@ -175,7 +186,7 @@ foreach my $home (@homes) {
 		}
 		elsif (defined $pid) {
 			system("$cmd");
-			my $code = $?;
+			my ($code) = ($?);
 			if ($code != 0) {
 				#Get the name of the file.
 				my $file = $1 if ($cmd =~ m/localfile \"(.*)\" parentid/);
@@ -186,7 +197,6 @@ foreach my $home (@homes) {
 				elsif (-z $file) {$error = "File is empty.";}
 				elsif (-l $file) {$error = "File is a symbolic link.";}
 				elsif (-t $file) {$error = "The file handle is open.";}
-				elsif (-B $file) {$error = "The file is binary.";}
 				else {$error = "Unknown error. File possibly is locked."}
 				err(1, "Cannot upload '$file': $error");
 			}
@@ -199,6 +209,7 @@ foreach my $home (@homes) {
 
 	#Clear out the condvar.
 	undef $done;
+	$user = "" unless ($userChange);
 
 	#Display the percentage of homes moved.
 	print ((($fin / @homes) * 100) . "% completed...\n\n");
