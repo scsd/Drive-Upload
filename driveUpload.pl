@@ -31,7 +31,8 @@ my @cmdList;
 #Holds the home directories to be synced.
 my @homes;
 #What user to send the files to.
-my ($user, $userChange) = ("", 0);
+my $user = "";
+my $userChange = 0;
 #Will hold a condition variable.
 my $done;
 #Holds a list of files and directories to be skipped.
@@ -41,9 +42,9 @@ my @ban = (
 	qr/\w+\.plist$/,
 	qr/\w+\.dmg$/,
 	qr/\w+\.app$/,
-	qr/^Applications$/,
+	qr/^Applications/,
 	qr/^[A-Za-z]+ User Data$/,
-	qr/^Google Drive$/,
+	#qr/^Google Drive$/,
 	qr/[Cc]ache/,
 	qr/\w+\.cache$/,
 	qr/\w+\.bin$/,
@@ -53,11 +54,14 @@ my @ban = (
 	qr/^[Ff]onts$/,
 	qr/^[Mm]icrosoft [Oo]ffice \d{4}$/,
 	qr/^[Tt]rash$/,
-	qr/^RECYCLE.BIN$/,
+	qr/RECYCLE.BIN/,
 	qr/^[Mm]etadata$/,
 	qr/\w+\.download$/,
 	qr/\w+\.pictClipping$/,
-	qr/^Icon[\u{f00d} \u{00EF}]$/
+	qr/^Icon[\u{f00d}\u{00EF}]$/,
+	qr/^Start Menu$/,
+	qr/^(POP|IMAP)\-\w+\@(mail\.)?\w+/,
+	qr/\w+\.mbox$/,
 );
 #Regex to remove any really bad special chars in files.
 my $banSpecial = qr/[\~\$\&\\\*\!\"\`]\ ?/;
@@ -77,7 +81,7 @@ while (@ARGV) {
 	elsif ($ARGV[0] =~ m/^--?q(uiet)?/i) {shift; $verbose = 0;}
 
 	#Set a folder to go to a specific username.
-	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; if (shift) {$user = $_; $userChange = 1;} }
+	elsif ($ARGV[0] =~ m/^--?u(ser)?/i) {shift; $user = shift; $userChange = 1; }
 
 	#Set the max number of files to upload.
 	elsif ($ARGV[0] =~ m/^--?m(ax)?/i) {shift; $maxUploads = shift // $maxUploads;}
@@ -112,7 +116,9 @@ my $fin = 1;
 foreach my $home (@homes) {
 	#Check if the 'user' variable is set. If not, set it to the user assosciated
 	#with the current home directory.
-	if (! $user) {
+	print "User = $user\n";
+	if (! $user and $userChange) {
+		print "Changing user.\n";
 		my @tmp = split '/', $home;
 		my $i = 0;
 		$user = $tmp[--$i] while (!$user);
@@ -123,6 +129,7 @@ foreach my $home (@homes) {
 	if (! userExists( $user )) {
 		err(0, "'$user' is not a valid user. Skipping...\n");
 		$user = "" unless ($userChange);
+		++$fin;
 		next;
 	}
 
@@ -377,7 +384,7 @@ sub upload {
 	}
 
 	#Rename any files that will cause an error when uploading.
-	if ($file =~ s/$banSpecial//g) {
+	if ($file =~ s/$banSpecial/-/g) {
 		my $newLoc;
 		my @tmp = split '/', $loc;
 		pop @tmp;
@@ -388,7 +395,7 @@ sub upload {
 	}
 
 	#Determine if the file to upload is a file or dir.
-	if (-f $loc) {
+	if ((-f $loc) and (! -l $loc)) {
 		#This item is a file.
 
 		#Add this to the list of commands to run.

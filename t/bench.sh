@@ -18,7 +18,7 @@ rm "$file" "$errLog"
 #Start the timer
 begin=`date "+%s"`
 #Run the script
-../driveUpload.pl -a "$address" -e "$errLog" -m "$uploads" -u "$user" $loc &> "$file"
+../driveUpload.pl -e "$errLog" -m "$uploads" -u "$user" $loc &> "$file"
 #Get exit code
 codeUpload="$?"
 #End the timer
