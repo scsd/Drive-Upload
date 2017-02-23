@@ -1,7 +1,0 @@
-#!/bin/bash
-
-base="/mnt/Staff_fs"
-loc="$base/f*"
-user=""
-address="quozientn@sgate.k12.mi.us"
-uploads=12
