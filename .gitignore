@@ -1,3 +1,4 @@
 t/config
 t/run.err
 t/run.log
+t/config
